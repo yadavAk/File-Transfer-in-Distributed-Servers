@@ -1,15 +1,13 @@
 import socket	# for sockets
-import sys, os	# for exit
-import time
+import sys, os, time, math, random
 import select
 import tqdm
-import math
 
 import buffer
 
-host = 'localhost' #input('Enter hostname/ip : ') # e.g. 'localhost'
-port = 8000 # int(input('Enter port no. of server 1 : ')) # e.g. 8000
-port2 = 8800 # int(input('Enter port no. of server 2: ')) # e.g. 8000
+host = input('Enter hostname/ip : ') # e.g. 'localhost'
+port = int(input('Enter port no. of server 1 : ')) # e.g. 8000
+port2 = int(input('Enter port no. of server 2: ')) # e.g. 8000
 
 try :
 	# create an AF_INET, STREAM socket (TCP)
@@ -52,7 +50,7 @@ sbuf2 = buffer.Buffer(s2)
 def send_file_data(sbuf, data_bytes):
 	sbuf.put_bytes(data_bytes)
 
-	sbuf.set_timeout(2)
+	sbuf.set_timeout(5)
 	temp = sbuf.get_utf8()
 	sbuf.set_timeout(None)
 	
@@ -66,6 +64,7 @@ print('From server 2 :', handshake_msg2)
 i = 0
 
 while True:
+	abort_transmission = 0
 	i = i+1
 	msg1 = sbuf.get_utf8()
 	msg2 = sbuf2.get_utf8()
@@ -114,12 +113,19 @@ while True:
 			if(delay == ''):
 				delay = '1'
 				print('Taking default Delay :', delay, 'ms')
+			delay = int(delay)
 
 			BUFFER_SIZE = input('Enter frame size in bytes for file transfer : ')
 			if BUFFER_SIZE == '':
-				BUFFER_SIZE = '10240'
+				BUFFER_SIZE = '500'
 				print('Taking default Frame Size :', int(BUFFER_SIZE)/1024, 'KB')
 			BUFFER_SIZE = int(BUFFER_SIZE)
+
+			error_probability = input('Enter error probability in transmission : ')
+			if error_probability == '':
+				error_probability = '0.1'
+				print('Taking default error probability : ', error_probability)
+			error_probability = int(float(error_probability)*100)
 
 			total_frames = math.ceil(filesize/BUFFER_SIZE)
 			if total_frames % 2 == 0:
@@ -132,8 +138,8 @@ while True:
 			if(filesize1 + filesize2 != filesize):
 				print('Error in file size calculation')
 			
-			sbuf.put_utf8(f"{filename} {filesize1} {BUFFER_SIZE+1}")
-			sbuf2.put_utf8(f"{filename} {filesize2} {BUFFER_SIZE+1}")
+			sbuf.put_utf8(f"{filename} {filesize1} {BUFFER_SIZE+2}")
+			sbuf2.put_utf8(f"{filename} {filesize2} {BUFFER_SIZE+2}")
 			
 			# start sending the file
 
@@ -147,24 +153,69 @@ while True:
 					if not bytes_read:
 					# 	# file transmitting is done
 						break
-					temp = ''
-					try :
-						time.sleep(0.001*int(delay))
-						if x%2 == 0:
-							temp = send_file_data(sbuf, str(x).encode() + bytes_read)
-						else :
-							temp = send_file_data(sbuf2, str(x).encode() + bytes_read)
-						
-						if int(temp) != (x+1)%2:
-							print('ACK received incorrectly')
-							break
+					attempts = 0
+					temp = [str(x), 'Error']
+					while (int(temp[0]) == x or temp[1] == 'Error') and attempts < 5:
+						if(attempts > 0):
+							print('Retransmission attempt', attempts+1)
+						else:
+							attempts = 0
+						try :
+							time.sleep(0.001*delay)
 
-					except:
-						print('Timeout reached, no ACK received')
+							checksum = 0
+							for byte in bytes_read:
+								checksum = (checksum + byte)%256
+								checksum = (checksum + 1)%256
+							checksum_bytes = bytes([255-checksum])
+
+							# Random error generation in frames
+							random_no = random.randrange(0, 100)
+							#print('Random number', random_no)
+							#print('sending...0', bytes_read)
+							send_bytes = bytes_read
+							if random_no < error_probability:
+								r_no = 1 #random.randrange(0, BUFFER_SIZE)
+								send_bytes = bytes_read[0:r_no]+b'\x00'+bytes_read[r_no+1:]
+								#print('\nr1\n', r_no, send_bytes)
+								#send_bytes += bytes([(bytes_read[r_no])%256]) # Error byte
+								#send_bytes += bytes_read[r_no+1:]
+							#print('sending...1', send_bytes)
+							# int.from_bytes(byt, byteorder=sys.byteorder)
+							send_bytes = str(x).encode() + send_bytes
+							send_bytes = send_bytes + checksum_bytes
+							#print('sending...3', send_bytes)
+
+							#print('HELLO', temp)
+							if x%2 == 0:	
+								temp = send_file_data(sbuf, send_bytes)
+							else :
+								temp = send_file_data(sbuf2, send_bytes)
+							#print('HELLO', temp)
+							temp = temp.split()
+							if int(temp[0]) != (x+1)%2:
+								print('ACK received incorrectly')
+								attempts = attempts+1
+							
+							if temp[1] == 'Error':
+								print('Error detected in this frame')
+								attempts = attempts+1
+
+						except:
+							temp = [str(x), 'Error']
+							attempts = attempts+1
+							print('Timeout reached, no ACK received')
+					if(attempts == 5):
+						print('All attempts failed. Cannot transmitted data. Aborting transmission...')
+						abort_transmission = 1
+						break
+
 					x = (x+1)%2
 					# update the progress bar
 					progress.update(len(bytes_read))
 			#s.shutdown(socket.SHUT_WR)
+			if abort_transmission == 1:
+				break
 			time.sleep(1)
 			print(sbuf.get_utf8())
 			print(sbuf2.get_utf8())
@@ -179,7 +230,9 @@ while True:
 			if(yes_no_msg != 'y'):
 				print('Current user logging out...')
 				break
+	if abort_transmission == 1:
+		break
 
 s.close()
 s2.close()
-print('Client Sockets closed successfully. Exiting...')
+print('Client socket closed successfully. Exiting...')

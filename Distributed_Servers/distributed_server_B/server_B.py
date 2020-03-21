@@ -81,29 +81,46 @@ def clientthread(conn, addr):
 		progress = tqdm.tqdm(range(filesize), f"Receiving {meta_data[0]}", unit="B", unit_scale=True, unit_divisor=1024)
 		remaining = filesize
 		while remaining > 0:
-			chunk_size = buffer_size if remaining >= buffer_size else remaining+1
+			chunk_size = buffer_size if remaining >= buffer_size else remaining+2
 			chunk = connbuf.get_bytes(chunk_size)
 			if not chunk: break
 			
-			x = chunk[:1]
 			#print('hello', remaining, chunk_size, chunk)
-			# print('hello1', x)
-			# print('hello2', chunk[1:])
-			chunk = chunk[1:]
-			f = open(filename, "ab")
-			f.write(chunk)
-			f.close()
-			remaining -= len(chunk)
-			
-			x = int(x.decode())
-			connbuf.put_utf8(str((x+1)%2))
-			
-			#time.sleep(0.01)
-			progress.update(buffer_size-1)
 
+			#Checksum based error detection 
+			chunk_t = chunk[1:len(chunk)-1]
+			check_sum_byte = 0
+			for byte in chunk_t:
+				check_sum_byte = (check_sum_byte + byte)%256
+				check_sum_byte = (check_sum_byte + 1)%256
+			check_sum_byte = check_sum_byte + chunk[len(chunk)-1]
+
+			try :
+				x = chunk[:1]
+				x = int(x.decode())
+			except:
+				x = 0
+
+			if(check_sum_byte == 255):
+				error_msg = 'No_Error'
+
+				chunk = chunk[1:len(chunk)-1]
+				f = open(filename, "ab")
+				f.write(chunk)
+				f.close()
+				remaining -= len(chunk)
+
+				#time.sleep(0.01)
+				progress.update(len(chunk))
+				
+			else:
+				error_msg = 'Error'
+
+			connbuf.put_utf8(str((x+1)%2) + ' ' + error_msg)
+			
 		time.sleep(1)
 		if remaining:
-			final_msg = 'File incomplete.  Missing',remaining,'bytes.'
+			final_msg = 'File incomplete.  Missing ' + remaining +' bytes.'
 			print(final_msg)
 		else:
 			final_msg = 'From distributed server : File transmission done successfully.'

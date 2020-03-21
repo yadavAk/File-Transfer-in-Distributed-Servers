@@ -113,23 +113,31 @@ def handle_user(connbuf, username, password, server_number):
 			
 			filesize = int(meta_data[1])
 			buffer_size = int(meta_data[2])
+
+			print('Random delay of 10 ms to 100 ms added to this server')
+
 			# start receiving the file from the socket
 			# and writing to the file stream
 			remaining = filesize
 			while remaining > 0:
-				chunk_size = buffer_size if remaining >= buffer_size else remaining+1
+				chunk_size = buffer_size if remaining >= buffer_size else remaining+2
 				chunk = connbuf.get_bytes(chunk_size)
 				if not chunk: break
 				#print('hello', remaining, chunk_size, chunk)
-				# Random delays of 100 ms to 1000 ms in main server
-				random_delay = random.randrange(1, 10)
+
+				# Random delays of 10 ms to 100 ms in main server
+				random_delay = random.randrange(10, 100)
 				time.sleep(1/random_delay)
 				dist_socket_buf.put_bytes(chunk)
 
-				connbuf.put_utf8(dist_socket_buf.get_utf8())
+				error_check = dist_socket_buf.get_utf8()
+				connbuf.put_utf8(error_check)
+				
+				error_check_ = error_check.split()
+				#print(error_check_)
+				if(error_check_[1] == 'No_Error'):
+					remaining -= len(chunk)-2
 
-				remaining -= len(chunk)-1
-				#time.sleep(0.01)
 			if remaining:
 				print('File incomplete.  Missing',remaining,'bytes.')
 			else:
