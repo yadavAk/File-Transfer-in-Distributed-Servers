@@ -1,7 +1,6 @@
 import socket
-import sys, os
+import sys, os, time, random
 import csv
-import time
 from _thread import *
 import tqdm
 
@@ -122,6 +121,9 @@ def handle_user(connbuf, username, password, server_number):
 				chunk = connbuf.get_bytes(chunk_size)
 				if not chunk: break
 				#print('hello', remaining, chunk_size, chunk)
+				# Random delays of 100 ms to 1000 ms in main server
+				random_delay = random.randrange(1, 10)
+				time.sleep(1/random_delay)
 				dist_socket_buf.put_bytes(chunk)
 
 				connbuf.put_utf8(dist_socket_buf.get_utf8())

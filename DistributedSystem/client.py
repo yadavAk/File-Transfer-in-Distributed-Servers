@@ -8,8 +8,8 @@ import math
 import buffer
 
 host = 'localhost' #input('Enter hostname/ip : ') # e.g. 'localhost'
-port = 8888 # int(input('Enter port no. of server 1 : ')) # e.g. 8000
-port2 = 8880 # int(input('Enter port no. of server 2: ')) # e.g. 8000
+port = 8000 # int(input('Enter port no. of server 1 : ')) # e.g. 8000
+port2 = 8800 # int(input('Enter port no. of server 2: ')) # e.g. 8000
 
 try :
 	# create an AF_INET, STREAM socket (TCP)
@@ -110,13 +110,15 @@ while True:
 			filesize = os.path.getsize('./client_files/' + filename)
 			print('Filesize = ', filesize, 'Bytes')
 			
-			delay = '10'
-			while delay == '':
-				delay = input('Enter Delay between frames in ms : ')
+			delay = input('Enter Delay between frames in ms : ')
+			if(delay == ''):
+				delay = '1'
+				print('Taking default Delay :', delay, 'ms')
 
-			BUFFER_SIZE = '102400'
-			while BUFFER_SIZE == '':
-				BUFFER_SIZE = input('Enter frame size in bytes for file transfer : ')
+			BUFFER_SIZE = input('Enter frame size in bytes for file transfer : ')
+			if BUFFER_SIZE == '':
+				BUFFER_SIZE = '10240'
+				print('Taking default Frame Size :', int(BUFFER_SIZE)/1024, 'KB')
 			BUFFER_SIZE = int(BUFFER_SIZE)
 
 			total_frames = math.ceil(filesize/BUFFER_SIZE)
